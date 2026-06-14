@@ -112,7 +112,7 @@ metadata:
   name: default
 spec:
   git:
-    url: https://github.com/stuttgart-things/xplane-provider-kubeconfig.git
+    url: https://github.com/stuttgart-things/provider-kubeconfig.git
     branch: main
   decryption:
     provider: sops

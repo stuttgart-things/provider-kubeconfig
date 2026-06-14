@@ -5,9 +5,9 @@ metadata:
   name: provider-kubeconfig
   description: Crossplane Provider that manages remote Kubernetes kubeconfigs from SOPS-encrypted Git repositories
   annotations:
-    github.com/project-slug: stuttgart-things/xplane-provider-kubeconfig
-    backstage.io/techdocs-ref: url:https://github.com/stuttgart-things/xplane-provider-kubeconfig/tree/main
-    backstage.io/source-location: url:https://github.com/stuttgart-things/xplane-provider-kubeconfig
+    github.com/project-slug: stuttgart-things/provider-kubeconfig
+    backstage.io/techdocs-ref: url:https://github.com/stuttgart-things/provider-kubeconfig/tree/main
+    backstage.io/source-location: url:https://github.com/stuttgart-things/provider-kubeconfig
   tags:
     - crossplane
     - provider
@@ -15,7 +15,7 @@ metadata:
     - sops
     - golang
   links:
-    - url: https://github.com/stuttgart-things/xplane-provider-kubeconfig
+    - url: https://github.com/stuttgart-things/provider-kubeconfig
       title: GitHub Repository
       icon: github
 spec:

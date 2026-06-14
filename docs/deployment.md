@@ -9,7 +9,7 @@ ghcr.io/stuttgart-things/provider-kubeconfig:<version>
 ghcr.io/stuttgart-things/provider-kubeconfig:latest
 ```
 
-Each [GitHub release](https://github.com/stuttgart-things/xplane-provider-kubeconfig/releases) publishes a semver-tagged image (e.g., `v0.2.1`).
+Each [GitHub release](https://github.com/stuttgart-things/provider-kubeconfig/releases) publishes a semver-tagged image (e.g., `v0.2.1`).
 
 ## Crossplane xpkg
 
