@@ -155,6 +155,8 @@ github.com/crossplane/crossplane-tools v0.0.0-20251017183449-dd4517244339 h1:MPb
 github.com/crossplane/crossplane-tools v0.0.0-20251017183449-dd4517244339/go.mod h1:8etxwmP4cZwJDwen4+PQlnc1tggltAhEfyyigmdHulQ=
 github.com/crossplane/crossplane/apis/v2 v2.0.0-20260424160951-8f231230ebb6 h1:9ki6AJQgBJIcLNjK+scUZp2ZDenuAo18d0JSNOlkY2Y=
 github.com/crossplane/crossplane/apis/v2 v2.0.0-20260424160951-8f231230ebb6/go.mod h1:h7KE74Z4TFs1L/FFv3RdsiG9Uax7L56oHpcggSZnONg=
+github.com/crossplane/crossplane/apis/v2 v2.3.2 h1:Drs3xz59qT3zFfaszxQWqr51a0leAx20DBL4TqMnqi0=
+github.com/crossplane/crossplane/apis/v2 v2.3.2/go.mod h1:o+D0ktZQKJCFcpfzMKA4n53aTo2sFqqDsADBNIRuIyE=
 github.com/cyphar/filepath-securejoin v0.6.1 h1:5CeZ1jPXEiYt3+Z6zqprSAgSWiggmpVyciv8syjIpVE=
 github.com/cyphar/filepath-securejoin v0.6.1/go.mod h1:A8hd4EnAeyujCJRrICiOWqjS1AX0a9kM5XL+NwKoYSc=
 github.com/dave/jennifer v1.7.1 h1:B4jJJDHelWcDhlRQxWeo0Npa/pYKBLrirAQoTN45txo=
