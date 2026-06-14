@@ -329,6 +329,15 @@ The provider bootstraps its own RBAC on startup to manage downstream ProviderCon
 
 This is automatic — no manual RBAC setup required. On provider upgrades (new pod/SA name), the bootstrap appends the new SA to the binding.
 
+## Git Cache
+
+Git sources are cloned into a per-repo cache directory. The cache root is created with `0700` permissions so cached repo contents (kubeconfigs, `.git`) are not readable by other users sharing the pod. Least-recently-used directories are evicted once the entry count exceeds a cap, bounding disk usage on long-running pods.
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `PROVIDER_KUBECONFIG_CACHE_DIR` | `$XDG_CACHE_HOME/provider-kubeconfig` (else `$TMPDIR/provider-kubeconfig`) | Cache root. Point at a dedicated writable volume (e.g. an `emptyDir`) to keep clones off shared `/tmp`. |
+| `PROVIDER_KUBECONFIG_CACHE_MAX_ENTRIES` | `32` | Max cached repo directories retained before LRU eviction. |
+
 ## Building
 
 ### Prerequisites
