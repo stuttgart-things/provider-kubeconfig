@@ -54,7 +54,7 @@ func SOPSDecrypt(data []byte, filePath string, ageKey string) ([]byte, error) {
 	}
 	defer func() { _ = os.Setenv("SOPS_AGE_KEY", prev) }()
 
-	format := formatFromPath(filePath)
+	format := FormatFromPath(filePath)
 	cleartext, err := decrypt.Data(data, format)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot decrypt SOPS data")
@@ -63,8 +63,8 @@ func SOPSDecrypt(data []byte, filePath string, ageKey string) ([]byte, error) {
 	return cleartext, nil
 }
 
-// formatFromPath returns the SOPS format string based on file extension.
-func formatFromPath(path string) string {
+// FormatFromPath returns the SOPS format string based on file extension.
+func FormatFromPath(path string) string {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".json":

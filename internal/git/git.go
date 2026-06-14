@@ -164,6 +164,20 @@ func repoMutex(key string) *sync.Mutex {
 	return mu
 }
 
+// Operation describes which git action EnsureCloned performed, so callers can
+// distinguish a fresh clone from a cache-hit pull or a pinned-revision checkout
+// (e.g. for metrics) without importing any observability dependency here.
+type Operation string
+
+const (
+	// OpClone means the repo was (re)cloned from scratch.
+	OpClone Operation = "clone"
+	// OpPull means an existing cache was updated via pull.
+	OpPull Operation = "pull"
+	// OpRevision means a pinned revision was ensured (full clone or cache hit).
+	OpRevision Operation = "revision"
+)
+
 // Repo manages cloning and pulling a Git repository to a local cache directory.
 type Repo struct {
 	url      string
@@ -199,26 +213,28 @@ func (r *Repo) auth() *http.BasicAuth {
 // revision is pinned it delegates to ensureRevision, which checks out the exact
 // commit/tag instead of tracking the branch tip. On success it marks the cache
 // as recently used and evicts least-recently-used entries beyond the cap.
-func (r *Repo) EnsureCloned(ctx context.Context) (string, error) {
+func (r *Repo) EnsureCloned(ctx context.Context) (string, Operation, error) {
 	mu := repoMutex(r.cacheDir)
 	mu.Lock()
 	defer mu.Unlock()
 
-	dir, err := r.ensure(ctx)
+	dir, op, err := r.ensure(ctx)
 	if err != nil {
-		return "", err
+		return "", op, err
 	}
 
 	touch(dir)
 	evictCache(filepath.Dir(r.cacheDir), r.cacheDir, maxCacheEntries())
-	return dir, nil
+	return dir, op, nil
 }
 
 // ensure performs the clone/pull (or pinned-revision checkout) and returns the
-// cache directory, without the LRU bookkeeping handled by EnsureCloned.
-func (r *Repo) ensure(ctx context.Context) (string, error) {
+// cache directory and which Operation it performed, without the LRU bookkeeping
+// handled by EnsureCloned.
+func (r *Repo) ensure(ctx context.Context) (string, Operation, error) {
 	if r.revision != "" {
-		return r.ensureRevision(ctx)
+		dir, err := r.ensureRevision(ctx)
+		return dir, OpRevision, err
 	}
 
 	refName := plumbing.NewBranchReferenceName(r.branch)
@@ -226,14 +242,14 @@ func (r *Repo) ensure(ctx context.Context) (string, error) {
 	if _, err := os.Stat(filepath.Join(r.cacheDir, ".git")); err == nil {
 		dir, pullErr := r.pull(ctx, refName)
 		if pullErr == nil {
-			return dir, nil
+			return dir, OpPull, nil
 		}
 		// Pull failed (e.g. stale shallow clone) — remove cache and re-clone
 		_ = os.RemoveAll(r.cacheDir)
 	}
 
 	if err := ensureCacheRoot(filepath.Dir(r.cacheDir)); err != nil {
-		return "", err
+		return "", OpClone, err
 	}
 
 	opts := &git.CloneOptions{
@@ -247,10 +263,10 @@ func (r *Repo) ensure(ctx context.Context) (string, error) {
 	if _, err := git.PlainCloneContext(ctx, r.cacheDir, false, opts); err != nil {
 		// Clean up partial clone on failure
 		_ = os.RemoveAll(r.cacheDir)
-		return "", errors.Wrap(err, "cannot clone git repository")
+		return "", OpClone, errors.Wrap(err, "cannot clone git repository")
 	}
 
-	return r.cacheDir, nil
+	return r.cacheDir, OpClone, nil
 }
 
 // ensureRevision clones the full repository (no shallow/single-branch limits, so

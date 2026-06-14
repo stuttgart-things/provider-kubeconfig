@@ -226,9 +226,12 @@ func TestEnsureClonedPrivateCacheAndNoCredentialLeak(t *testing.T) {
 	const token = "SUPER-SECRET-TOKEN"
 	// Pin to the commit hash so the (local-friendly) full-clone path runs.
 	r := NewRepo(src, "main", hash, token)
-	dir, err := r.EnsureCloned(context.Background())
+	dir, op, err := r.EnsureCloned(context.Background())
 	if err != nil {
 		t.Fatalf("EnsureCloned: %v", err)
+	}
+	if op != OpRevision {
+		t.Errorf("operation: want %q, got %q", OpRevision, op)
 	}
 
 	info, err := os.Stat(root)

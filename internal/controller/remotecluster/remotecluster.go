@@ -21,12 +21,17 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/crossplane/crossplane-runtime/v2/pkg/feature"
 	xpv2 "github.com/crossplane/crossplane/apis/v2/core/v2"
 
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,8 +55,12 @@ import (
 	clusterpkg "github.com/stuttgart-things/provider-kubeconfig/internal/cluster"
 	decryptpkg "github.com/stuttgart-things/provider-kubeconfig/internal/decrypt"
 	gitpkg "github.com/stuttgart-things/provider-kubeconfig/internal/git"
+	providermetrics "github.com/stuttgart-things/provider-kubeconfig/internal/metrics"
 	vaultpkg "github.com/stuttgart-things/provider-kubeconfig/internal/vault"
 )
+
+// tracerName identifies the provider's spans in OpenTelemetry traces.
+const tracerName = "github.com/stuttgart-things/provider-kubeconfig"
 
 const (
 	errNotRemoteCluster  = "managed resource is not a RemoteCluster custom resource"
@@ -416,33 +425,80 @@ func (c *external) readFromVault(ctx context.Context, path, key string) ([]byte,
 
 func (c *external) cloneAndReadFile(ctx context.Context, filePath string) ([]byte, error) {
 	log := ctrl.LoggerFrom(ctx)
+	tracer := otel.Tracer(tracerName)
 
-	repo := gitpkg.NewRepo(c.providerSpec.Git.URL, c.providerSpec.Git.Branch, c.providerSpec.Git.Revision, c.gitToken)
+	repoURL := c.providerSpec.Git.URL
+	branch := c.providerSpec.Git.Branch
+	revision := c.providerSpec.Git.Revision
+	repo := gitpkg.NewRepo(repoURL, branch, revision, c.gitToken)
 
-	if _, err := repo.EnsureCloned(ctx); err != nil {
-		log.Info("Git clone/pull failed", "url", c.providerSpec.Git.URL, "branch", c.providerSpec.Git.Branch, "revision", c.providerSpec.Git.Revision, "error", err)
-		return nil, errors.Wrap(err, errCloneRepo)
+	// --- git fetch (clone/pull/revision) ---
+	fetchCtx, span := tracer.Start(ctx, "git.EnsureCloned", trace.WithAttributes(
+		attribute.String("git.repo", repoURL),
+		attribute.String("git.branch", branch),
+		attribute.String("git.revision", revision),
+	))
+	start := time.Now()
+	_, op, err := repo.EnsureCloned(fetchCtx)
+	span.SetAttributes(attribute.String("git.operation", string(op)))
+	providermetrics.GitFetchDuration.WithLabelValues(repoURL, branch, string(op), result(err)).Observe(time.Since(start).Seconds())
+	providermetrics.GitCacheOps.WithLabelValues(repoURL, branch, string(op)).Inc()
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "git fetch failed")
+		span.End()
+		providermetrics.ReconcileErrors.WithLabelValues(providermetrics.StageGit).Inc()
+		log.Info("Git clone/pull failed", "url", repoURL, "branch", branch, "revision", revision, "error", err)
+		return nil, errors.Wrapf(err, "%s (url=%q branch=%q revision=%q)", errCloneRepo, repoURL, branch, revision)
 	}
-	log.V(1).Info("Git repo ready", "url", c.providerSpec.Git.URL, "branch", c.providerSpec.Git.Branch, "revision", c.providerSpec.Git.Revision)
+	span.End()
+	log.V(1).Info("Git repo ready", "url", repoURL, "branch", branch, "revision", revision, "operation", op)
 
+	// --- read file ---
+	_, readSpan := tracer.Start(ctx, "git.ReadFile", trace.WithAttributes(attribute.String("git.path", filePath)))
 	content, err := repo.ReadFile(filePath)
 	if err != nil {
+		readSpan.RecordError(err)
+		readSpan.SetStatus(codes.Error, "read file failed")
+		readSpan.End()
+		providermetrics.ReconcileErrors.WithLabelValues(providermetrics.StageGit).Inc()
 		log.Info("Failed to read file from git repo", "path", filePath, "error", err)
-		return nil, errors.Wrap(err, errReadFile)
+		return nil, errors.Wrapf(err, "%s (url=%q path=%q)", errReadFile, repoURL, filePath)
 	}
+	readSpan.End()
 
-	// Decrypt if an age key is available
+	// --- decrypt (if an age key is available) ---
 	if c.ageKey != "" {
+		format := decryptpkg.FormatFromPath(filePath)
+		_, decSpan := tracer.Start(ctx, "sops.Decrypt", trace.WithAttributes(
+			attribute.String("sops.format", format),
+			attribute.String("git.path", filePath),
+		))
+		start := time.Now()
 		decrypted, err := decryptpkg.SOPSDecrypt(content, filePath, c.ageKey)
+		providermetrics.SOPSDecryptDuration.WithLabelValues(format, result(err)).Observe(time.Since(start).Seconds())
 		if err != nil {
+			decSpan.RecordError(err)
+			decSpan.SetStatus(codes.Error, "decrypt failed")
+			decSpan.End()
+			providermetrics.ReconcileErrors.WithLabelValues(providermetrics.StageDecrypt).Inc()
 			log.Info("SOPS decryption failed", "path", filePath, "error", err)
-			return nil, errors.Wrap(err, errDecryptFile)
+			return nil, errors.Wrapf(err, "%s (url=%q path=%q)", errDecryptFile, repoURL, filePath)
 		}
+		decSpan.End()
 		log.V(1).Info("Decrypted kubeconfig", "path", filePath)
 		return decrypted, nil
 	}
 
 	return content, nil
+}
+
+// result maps an error to a Prometheus result label value.
+func result(err error) string {
+	if err != nil {
+		return providermetrics.ResultError
+	}
+	return providermetrics.ResultSuccess
 }
 
 // buildDownstreamProviderConfig builds an unstructured downstream ProviderConfig
@@ -892,12 +948,14 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	if err := c.kube.Create(ctx, secret); err != nil {
+		providermetrics.ReconcileErrors.WithLabelValues(providermetrics.StageSecret).Inc()
 		return managed.ExternalCreation{}, errors.Wrap(err, errCreateSecret)
 	}
 	log.Info("Created kubeconfig secret", "cluster", cr.GetName(), "secret", name, "namespace", ns)
 
 	// Create downstream ProviderConfigs and ArgoCD secrets
 	if err := c.ensureDownstreamProviderConfigs(ctx, cr, name, ns, content); err != nil {
+		providermetrics.ReconcileErrors.WithLabelValues(providermetrics.StageDownstream).Inc()
 		log.Info("Failed to create downstream ProviderConfigs", "cluster", cr.GetName(), "error", err)
 		return managed.ExternalCreation{}, err
 	}
@@ -947,6 +1005,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	// Fetch and update the existing Secret
 	secret := &corev1.Secret{}
 	if err := c.kube.Get(ctx, types.NamespacedName{Name: name, Namespace: ns}, secret); err != nil {
+		providermetrics.ReconcileErrors.WithLabelValues(providermetrics.StageSecret).Inc()
 		return managed.ExternalUpdate{}, errors.Wrap(err, errGetSecret)
 	}
 
@@ -958,11 +1017,13 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	cr.Status.AtProvider.VaultSecretVersion = vaultVersion
 
 	if err := c.kube.Update(ctx, secret); err != nil {
+		providermetrics.ReconcileErrors.WithLabelValues(providermetrics.StageSecret).Inc()
 		return managed.ExternalUpdate{}, errors.Wrap(err, errUpdateSecret)
 	}
 
 	// Reconcile downstream ProviderConfigs and ArgoCD secrets (create missing, delete stale)
 	if err := c.ensureDownstreamProviderConfigs(ctx, cr, name, ns, content); err != nil {
+		providermetrics.ReconcileErrors.WithLabelValues(providermetrics.StageDownstream).Inc()
 		return managed.ExternalUpdate{}, err
 	}
 

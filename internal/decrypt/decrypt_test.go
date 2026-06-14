@@ -66,9 +66,9 @@ func TestFormatFromPath(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			got := formatFromPath(tc.path)
+			got := FormatFromPath(tc.path)
 			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("formatFromPath(%q): -want, +got:\n%s", tc.path, diff)
+				t.Errorf("FormatFromPath(%q): -want, +got:\n%s", tc.path, diff)
 			}
 		})
 	}
