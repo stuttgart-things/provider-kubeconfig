@@ -18,6 +18,12 @@ type GitConfig struct {
 	// Branch to use. Defaults to main.
 	// +kubebuilder:default=main
 	Branch string `json:"branch,omitempty"`
+	// Revision pins the checkout to a specific commit SHA or tag. When set,
+	// the branch tip is ignored and the kubeconfig is read from this exact
+	// revision, making reconciles deterministic and enabling rollback by
+	// changing the field rather than force-pushing the branch.
+	// +optional
+	Revision string `json:"revision,omitempty"`
 	// SecretRef references a secret with Git credentials (token or SSH key).
 	// +optional
 	SecretRef *SecretRef `json:"secretRef,omitempty"`

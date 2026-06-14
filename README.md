@@ -89,6 +89,9 @@ spec:
   git:
     url: https://github.com/my-org/my-public-repo.git
     branch: main
+    # revision: v1.2.3   # optional: pin to a commit SHA or tag for
+    #                    # deterministic, rollback-friendly reconciles.
+    #                    # When set, the branch tip is ignored.
   decryption:
     provider: sops
     secretRef:

@@ -51,18 +51,21 @@ func repoMutex(key string) *sync.Mutex {
 type Repo struct {
 	url      string
 	branch   string
+	revision string
 	token    string
 	cacheDir string
 }
 
-// NewRepo creates a Repo. The cache directory is derived deterministically from the URL.
-func NewRepo(url, branch, token string) *Repo {
+// NewRepo creates a Repo. The cache directory is derived deterministically from
+// the URL, branch and revision, so a pinned-revision checkout never collides
+// with the branch-tip cache for the same repo.
+func NewRepo(url, branch, revision, token string) *Repo {
 	if branch == "" {
 		branch = "main"
 	}
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(url+"@"+branch)))[:16]
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(url+"@"+branch+"#"+revision)))[:16]
 	cacheDir := filepath.Join(os.TempDir(), "provider-kubeconfig", hash)
-	return &Repo{url: url, branch: branch, token: token, cacheDir: cacheDir}
+	return &Repo{url: url, branch: branch, revision: revision, token: token, cacheDir: cacheDir}
 }
 
 func (r *Repo) auth() *http.BasicAuth {
@@ -75,11 +78,17 @@ func (r *Repo) auth() *http.BasicAuth {
 	}
 }
 
-// EnsureCloned clones the repo if not cached, or pulls latest if it is.
+// EnsureCloned clones the repo if not cached, or pulls latest if it is. When a
+// revision is pinned it delegates to ensureRevision, which checks out the exact
+// commit/tag instead of tracking the branch tip.
 func (r *Repo) EnsureCloned(ctx context.Context) (string, error) {
 	mu := repoMutex(r.cacheDir)
 	mu.Lock()
 	defer mu.Unlock()
+
+	if r.revision != "" {
+		return r.ensureRevision(ctx)
+	}
 
 	refName := plumbing.NewBranchReferenceName(r.branch)
 
@@ -108,6 +117,49 @@ func (r *Repo) EnsureCloned(ctx context.Context) (string, error) {
 		// Clean up partial clone on failure
 		_ = os.RemoveAll(r.cacheDir)
 		return "", errors.Wrap(err, "cannot clone git repository")
+	}
+
+	return r.cacheDir, nil
+}
+
+// ensureRevision clones the full repository (no shallow/single-branch limits, so
+// an arbitrary commit SHA or tag is resolvable) and checks out the pinned
+// revision. The revision is treated as immutable: because the cache key embeds
+// it, an existing cache is reused as-is without fetching.
+func (r *Repo) ensureRevision(ctx context.Context) (string, error) {
+	if _, err := os.Stat(filepath.Join(r.cacheDir, ".git")); err == nil {
+		return r.cacheDir, nil
+	}
+
+	if err := os.MkdirAll(filepath.Dir(r.cacheDir), 0750); err != nil {
+		return "", errors.Wrap(err, "cannot create cache parent directory")
+	}
+
+	repo, err := git.PlainCloneContext(ctx, r.cacheDir, false, &git.CloneOptions{
+		URL:  r.url,
+		Auth: r.auth(),
+		Tags: git.AllTags,
+	})
+	if err != nil {
+		_ = os.RemoveAll(r.cacheDir)
+		return "", errors.Wrap(err, "cannot clone git repository")
+	}
+
+	hash, err := repo.ResolveRevision(plumbing.Revision(r.revision))
+	if err != nil {
+		_ = os.RemoveAll(r.cacheDir)
+		return "", errors.Wrapf(err, "cannot resolve git revision %q", r.revision)
+	}
+
+	wt, err := repo.Worktree()
+	if err != nil {
+		_ = os.RemoveAll(r.cacheDir)
+		return "", errors.Wrap(err, "cannot get worktree")
+	}
+
+	if err := wt.Checkout(&git.CheckoutOptions{Hash: *hash}); err != nil {
+		_ = os.RemoveAll(r.cacheDir)
+		return "", errors.Wrapf(err, "cannot checkout git revision %q", r.revision)
 	}
 
 	return r.cacheDir, nil
