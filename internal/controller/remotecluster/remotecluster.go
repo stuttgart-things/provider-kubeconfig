@@ -22,8 +22,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	xpv2 "github.com/crossplane/crossplane-runtime/v2/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/feature"
+	xpv2 "github.com/crossplane/crossplane/apis/v2/core/v2"
 
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/pkg/errors"

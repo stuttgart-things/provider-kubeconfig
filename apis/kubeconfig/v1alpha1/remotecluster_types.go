@@ -17,8 +17,7 @@ package v1alpha1
 import (
 	"reflect"
 
-	xpv1 "github.com/crossplane/crossplane-runtime/v2/apis/common/v1"
-	xpv2 "github.com/crossplane/crossplane-runtime/v2/apis/common/v2"
+	xpv1 "github.com/crossplane/crossplane/apis/v2/core/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -108,14 +107,14 @@ type RemoteClusterObservation struct {
 
 // A RemoteClusterSpec defines the desired state of a RemoteCluster.
 type RemoteClusterSpec struct {
-	xpv2.ManagedResourceSpec `json:",inline"`
+	xpv1.ManagedResourceSpec `json:",inline"`
 	ForProvider              RemoteClusterParameters `json:"forProvider"`
 }
 
 // A RemoteClusterStatus represents the observed state of a RemoteCluster.
 type RemoteClusterStatus struct {
-	xpv1.ResourceStatus `json:",inline"`
-	AtProvider          RemoteClusterObservation `json:"atProvider,omitempty"`
+	xpv1.ManagedResourceStatus `json:",inline"`
+	AtProvider                 RemoteClusterObservation `json:"atProvider,omitempty"`
 }
 
 // +kubebuilder:object:root=true
