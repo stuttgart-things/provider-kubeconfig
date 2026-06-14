@@ -417,13 +417,13 @@ func (c *external) readFromVault(ctx context.Context, path, key string) ([]byte,
 func (c *external) cloneAndReadFile(ctx context.Context, filePath string) ([]byte, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	repo := gitpkg.NewRepo(c.providerSpec.Git.URL, c.providerSpec.Git.Branch, c.gitToken)
+	repo := gitpkg.NewRepo(c.providerSpec.Git.URL, c.providerSpec.Git.Branch, c.providerSpec.Git.Revision, c.gitToken)
 
 	if _, err := repo.EnsureCloned(ctx); err != nil {
-		log.Info("Git clone/pull failed", "url", c.providerSpec.Git.URL, "branch", c.providerSpec.Git.Branch, "error", err)
+		log.Info("Git clone/pull failed", "url", c.providerSpec.Git.URL, "branch", c.providerSpec.Git.Branch, "revision", c.providerSpec.Git.Revision, "error", err)
 		return nil, errors.Wrap(err, errCloneRepo)
 	}
-	log.V(1).Info("Git repo ready", "url", c.providerSpec.Git.URL, "branch", c.providerSpec.Git.Branch)
+	log.V(1).Info("Git repo ready", "url", c.providerSpec.Git.URL, "branch", c.providerSpec.Git.Branch, "revision", c.providerSpec.Git.Revision)
 
 	content, err := repo.ReadFile(filePath)
 	if err != nil {

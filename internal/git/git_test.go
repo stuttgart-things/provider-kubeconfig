@@ -26,10 +26,11 @@ import (
 
 func TestNewRepo(t *testing.T) {
 	cases := map[string]struct {
-		url    string
-		branch string
-		token  string
-		wantBr string
+		url      string
+		branch   string
+		revision string
+		token    string
+		wantBr   string
 	}{
 		"DefaultBranch": {
 			url:    "https://github.com/example/repo.git",
@@ -41,11 +42,17 @@ func TestNewRepo(t *testing.T) {
 			branch: "develop",
 			wantBr: "develop",
 		},
+		"PinnedRevision": {
+			url:      "https://github.com/example/repo.git",
+			branch:   "main",
+			revision: "v1.2.3",
+			wantBr:   "main",
+		},
 	}
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			r := NewRepo(tc.url, tc.branch, tc.token)
+			r := NewRepo(tc.url, tc.branch, tc.revision, tc.token)
 			if diff := cmp.Diff(tc.wantBr, r.branch); diff != "" {
 				t.Errorf("branch: -want, +got:\n%s", diff)
 			}
@@ -60,9 +67,9 @@ func TestNewRepo(t *testing.T) {
 }
 
 func TestNewRepoDeterministicCacheDir(t *testing.T) {
-	r1 := NewRepo("https://github.com/example/repo.git", "main", "")
-	r2 := NewRepo("https://github.com/example/repo.git", "main", "")
-	r3 := NewRepo("https://github.com/example/other.git", "main", "")
+	r1 := NewRepo("https://github.com/example/repo.git", "main", "", "")
+	r2 := NewRepo("https://github.com/example/repo.git", "main", "", "")
+	r3 := NewRepo("https://github.com/example/other.git", "main", "", "")
 
 	if r1.cacheDir != r2.cacheDir {
 		t.Errorf("same URL should produce same cacheDir: %q vs %q", r1.cacheDir, r2.cacheDir)
@@ -71,14 +78,25 @@ func TestNewRepoDeterministicCacheDir(t *testing.T) {
 		t.Errorf("different URLs should produce different cacheDirs: %q vs %q", r1.cacheDir, r3.cacheDir)
 	}
 
-	r4 := NewRepo("https://github.com/example/repo.git", "develop", "")
+	r4 := NewRepo("https://github.com/example/repo.git", "develop", "", "")
 	if r1.cacheDir == r4.cacheDir {
 		t.Errorf("different branches should produce different cacheDirs: %q vs %q", r1.cacheDir, r4.cacheDir)
+	}
+
+	// A pinned revision must not collide with the branch-tip cache, and
+	// different revisions must map to different cache dirs.
+	r5 := NewRepo("https://github.com/example/repo.git", "main", "v1.0.0", "")
+	r6 := NewRepo("https://github.com/example/repo.git", "main", "v2.0.0", "")
+	if r1.cacheDir == r5.cacheDir {
+		t.Errorf("pinned revision should not collide with branch-tip cacheDir: %q", r5.cacheDir)
+	}
+	if r5.cacheDir == r6.cacheDir {
+		t.Errorf("different revisions should produce different cacheDirs: %q vs %q", r5.cacheDir, r6.cacheDir)
 	}
 }
 
 func TestAuth(t *testing.T) {
-	r := NewRepo("https://github.com/example/repo.git", "", "my-token")
+	r := NewRepo("https://github.com/example/repo.git", "", "", "my-token")
 	auth := r.auth()
 	if auth == nil {
 		t.Fatal("expected auth to be non-nil when token is set")
@@ -90,7 +108,7 @@ func TestAuth(t *testing.T) {
 		t.Errorf("password: want %q, got %q", "my-token", auth.Password)
 	}
 
-	r2 := NewRepo("https://github.com/example/repo.git", "", "")
+	r2 := NewRepo("https://github.com/example/repo.git", "", "", "")
 	if r2.auth() != nil {
 		t.Error("expected nil auth when token is empty")
 	}
