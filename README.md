@@ -338,6 +338,23 @@ Git sources are cloned into a per-repo cache directory. The cache root is create
 | `PROVIDER_KUBECONFIG_CACHE_DIR` | `$XDG_CACHE_HOME/provider-kubeconfig` (else `$TMPDIR/provider-kubeconfig`) | Cache root. Point at a dedicated writable volume (e.g. an `emptyDir`) to keep clones off shared `/tmp`. |
 | `PROVIDER_KUBECONFIG_CACHE_MAX_ENTRIES` | `32` | Max cached repo directories retained before LRU eviction. |
 
+## Observability
+
+### Metrics
+
+Custom Prometheus metrics are exposed on the manager's existing `/metrics` endpoint alongside the standard controller-runtime and crossplane metrics:
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `provider_kubeconfig_git_fetch_duration_seconds` | histogram | `repo`, `branch`, `operation`, `result` | Git clone/pull/revision latency. `operation` ∈ `clone\|pull\|revision`. |
+| `provider_kubeconfig_git_cache_total` | counter | `repo`, `branch`, `operation` | Git source operations, distinguishing fresh clone from cache-hit pull. |
+| `provider_kubeconfig_sops_decrypt_duration_seconds` | histogram | `format`, `result` | SOPS decrypt latency. |
+| `provider_kubeconfig_reconcile_errors_total` | counter | `stage` | Reconcile errors by stage (`git\|decrypt\|secret\|downstream`). |
+
+### Tracing
+
+The reconcile hot path emits OpenTelemetry spans (`git.EnsureCloned`, `git.ReadFile`, `sops.Decrypt`) so traces show which phase dominates. Tracing is **off by default** and activates when a standard OTLP endpoint is configured — e.g. set `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317`. Standard `OTEL_*` env vars (headers, TLS, sampling) are honored.
+
 ## Building
 
 ### Prerequisites

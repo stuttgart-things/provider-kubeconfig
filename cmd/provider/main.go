@@ -51,6 +51,7 @@ import (
 	"github.com/stuttgart-things/provider-kubeconfig/apis"
 	kubeconfig "github.com/stuttgart-things/provider-kubeconfig/internal/controller"
 	rbacpkg "github.com/stuttgart-things/provider-kubeconfig/internal/rbac"
+	"github.com/stuttgart-things/provider-kubeconfig/internal/tracing"
 	"github.com/stuttgart-things/provider-kubeconfig/internal/version"
 )
 
@@ -83,6 +84,16 @@ func main() {
 		// is not really needed, but otherwise we get a warning from the
 		// controller-runtime.
 		ctrl.SetLogger(zap.New(zap.WriteTo(io.Discard)))
+	}
+
+	// Optional OpenTelemetry tracing. No-op unless an OTEL endpoint is set; a
+	// bad/unreachable endpoint must not stop the provider, so failures only log.
+	shutdownTracing, tracingOn, err := tracing.Setup(context.Background(), version.Version)
+	if err != nil {
+		log.Info("OpenTelemetry tracing setup failed; continuing without tracing", "error", err)
+	} else if tracingOn {
+		log.Info("OpenTelemetry tracing enabled")
+		defer func() { _ = shutdownTracing(context.Background()) }()
 	}
 
 	cfg, err := ctrl.GetConfig()
