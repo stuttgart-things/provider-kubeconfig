@@ -1,5 +1,12 @@
 # provider-kubeconfig
 
+[![CI - Build & Test](https://github.com/stuttgart-things/provider-kubeconfig/actions/workflows/build-test.yaml/badge.svg)](https://github.com/stuttgart-things/provider-kubeconfig/actions/workflows/build-test.yaml)
+[![Build, Push & Scan Container Image](https://github.com/stuttgart-things/provider-kubeconfig/actions/workflows/build-scan-image.yaml/badge.svg)](https://github.com/stuttgart-things/provider-kubeconfig/actions/workflows/build-scan-image.yaml)
+[![Latest Release](https://img.shields.io/github/v/release/stuttgart-things/provider-kubeconfig)](https://github.com/stuttgart-things/provider-kubeconfig/releases/latest)
+[![Go Report Card](https://goreportcard.com/badge/github.com/stuttgart-things/provider-kubeconfig)](https://goreportcard.com/report/github.com/stuttgart-things/provider-kubeconfig)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/stuttgart-things/provider-kubeconfig)](go.mod)
+[![License](https://img.shields.io/github/license/stuttgart-things/provider-kubeconfig)](LICENSE)
+
 `provider-kubeconfig` is a [Crossplane](https://crossplane.io/) Provider that
 manages remote Kubernetes cluster kubeconfigs. It reads kubeconfig files from
 **Git repositories** (SOPS-encrypted) or **HashiCorp Vault** (KVv2), and
