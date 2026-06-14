@@ -20,10 +20,20 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/getsops/sops/v3/decrypt"
 	"github.com/pkg/errors"
 )
+
+// sopsEnvMu serializes access to the process-global SOPS_AGE_KEY environment
+// variable. SOPS reads the age key from this env var, so without serialization
+// concurrent reconciles of RemoteClusters with different age keys can race:
+// one goroutine could overwrite the key while another is mid-decrypt, causing
+// sporadic decrypt failures or a key mismatch. Decryption is CPU-cheap and not
+// the reconcile hot path (git fetch is), so a global lock is an acceptable
+// mitigation. See issue #58.
+var sopsEnvMu sync.Mutex
 
 // SOPSDecrypt decrypts SOPS-encrypted data using the provided age key.
 // It detects the format from the file path extension.
@@ -31,6 +41,11 @@ func SOPSDecrypt(data []byte, filePath string, ageKey string) ([]byte, error) {
 	if ageKey == "" {
 		return nil, errors.New("age key is empty")
 	}
+
+	// Serialize the env-var set/decrypt/restore so concurrent callers with
+	// different keys cannot clobber each other's SOPS_AGE_KEY.
+	sopsEnvMu.Lock()
+	defer sopsEnvMu.Unlock()
 
 	// Set the age key for SOPS to pick up
 	prev := os.Getenv("SOPS_AGE_KEY")
