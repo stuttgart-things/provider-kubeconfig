@@ -2,7 +2,7 @@ module github.com/stuttgart-things/provider-kubeconfig
 
 go 1.26.0
 
-toolchain go1.26.5
+toolchain go1.27.1
 
 tool sigs.k8s.io/controller-tools/cmd/controller-gen
 
